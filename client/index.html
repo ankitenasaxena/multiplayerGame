@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scribble - Fun Games Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Comic+Neue:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <div id="connectScreen" class="screen active">
+            <h1>Skribbl.io</h1>
+            <p>Connecting to server...</p>
+            <div class="spinner"></div>
+        </div>
+
+        <div id="playerNameScreen" class="screen">
+            <h2>Choose Your Name</h2>
+            <div class="form-group">
+                <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="20">
+            </div>
+            <button onclick="app.submitPlayerName()">Continue</button>
+        </div>
+
+        <div id="homeScreen" class="screen">
+            <h1 style="font-size: 48px; font-weight: 700; margin-bottom: 48px; letter-spacing: -0.02em;">Fun Games</h1>
+            <div class="games-grid">
+                <div class="game-card" onclick="app.openScribble()">
+                    <div class="game-icon">✏️</div>
+                    <h3>Scribble</h3>
+                    <p>Draw and guess words with friends!</p>
+                </div>
+                <div class="game-card coming-soon">
+                    <div class="game-icon">🎮</div>
+                    <h3>Coming Soon</h3>
+                    <p>More fun games on the way!</p>
+                </div>
+                <div class="game-card coming-soon">
+                    <div class="game-icon">🎯</div>
+                    <h3>Coming Soon</h3>
+                    <p>More fun games on the way!</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="scribbleScreen" class="screen">
+            <h2>Welcome to Scribble</h2>
+            <div class="button-group">
+                <button onclick="app.goToCreateRoom()">Create Room</button>
+                <button class="secondary-btn" onclick="app.toggleJoinSection()">Join Room</button>
+            </div>
+            <div id="joinSection" style="display: none;" class="join-section">
+                <h3>Enter Room Code</h3>
+                <div class="room-id-input">
+                    <input type="text" id="roomIdInput" placeholder="e.g., ABC123" maxlength="10">
+                </div>
+                <button onclick="app.joinRoom()">Join</button>
+            </div>
+            <button class="back-btn" onclick="app.backToGames()" style="margin-top: 24px; background: var(--text-secondary);">← Back to Games</button>
+        </div>
+
+        <div id="lobbyScreen" class="screen">
+            <div class="lobby-header">
+                <div class="room-info">
+                    <h2>Room <span class="room-code" id="displayRoomCode">---</span></h2>
+                    <p id="playerCountDisplay">Loading...</p>
+                </div>
+                <button class="leave-btn" onclick="app.leaveRoom()">Leave Room</button>
+            </div>
+            <div class="lobby-content">
+                <div class="players-section">
+                    <h3>Players</h3>
+                    <div class="players-list" id="playersList"></div>
+                </div>
+                <div class="settings-section">
+                    <h3>Settings</h3>
+                    <div id="settingsContainer"></div>
+                    <div id="lobbyActions" class="lobby-actions" style="display: none;">
+                        <button class="start-btn" id="startGameBtn" onclick="app.startGame()">Start Game</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="gameScreen" class="screen">
+            <div class="game-container">
+                <div class="game-main">
+                    <div class="game-header">
+                        <div>
+                            <div class="game-title">Round <span id="currentRound">1</span> of <span
+                                    id="totalRounds">3</span></div>
+                            <div class="round-info" id="drawerInfo"></div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 20px;">
+                            <div class="game-timer" id="gameTimer">60</div>
+                            <button class="leave-btn" onclick="app.leaveRoomFromGame()" style="width: auto; padding: 10px 20px; font-size: 14px;">Leave Room</button>
+                        </div>
+                    </div>
+
+                    <div id="wordSelectionPhase" style="display: none;">
+                        <p style="margin-bottom: 20px; color: #666;">Select a word to draw:</p>
+                        <div class="word-options-grid" id="wordOptionsContainer"></div>
+                    </div>
+
+                    <div id="drawingPhase" style="display: none;">
+                        <div class="masked-word-display" id="maskedWordDisplay">_ _ _</div>
+                        <canvas id="canvas"></canvas>
+                        <div class="drawing-tools">
+                            <div class="tool-selector">
+                                <button class="tool-btn active" id="penTool" onclick="app.selectTool('pen')" title="Pen">
+                                    ✏️
+                                </button>
+                                <button class="tool-btn" id="eraserTool" onclick="app.selectTool('eraser')" title="Eraser">
+                                    🧹
+                                </button>
+                            </div>
+                            <div class="color-picker" id="colorPicker"></div>
+                            <div class="size-control">
+                                <label>Size:</label>
+                                <input type="range" id="lineWidth" min="1" max="50" value="3">
+                                <div class="size-display" id="sizeDisplay">3</div>
+                            </div>
+                            <button class="clear-btn" onclick="app.clearCanvas()">Clear</button>
+                        </div>
+
+                        <div class="guess-input-area">
+                            <div class="guess-input">
+                                <input type="text" id="guessInput" placeholder="Type your guess..." maxlength="50" onkeypress="if(event.key==='Enter') app.submitGuess()">
+                                <button onclick="app.submitGuess()">Guess</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="game-sidebar">
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Leaderboard</div>
+                        <div class="leaderboard" id="gameLeaderboard"></div>
+                    </div>
+                    <div class="sidebar-section">
+                        <div class="sidebar-title">Chat</div>
+                        <div class="chat" id="gameChat"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="roundEndScreen" class="screen">
+            <h2>Round Ended</h2>
+            <div class="round-end-word" id="revealedWord"></div>
+            <div class="round-end-leaderboard" id="roundEndLeaderboard"></div>
+            <p id="roundEndMessage" style="color: #666; margin: 20px 0;"></p>
+        </div>
+
+        <div id="gameEndScreen" class="screen">
+            <h1 class="game-end-title">Game Over!</h1>
+            <div class="final-leaderboard" id="finalLeaderboard"></div>
+            <div class="actions">
+                <button id="playAgainBtn" onclick="app.playAgain()" style="display: none;">Play Again</button>
+                <button class="secondary-btn" onclick="app.goHome()">Home</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>

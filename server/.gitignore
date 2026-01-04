@@ -1,0 +1,48 @@
+# dependencies
+node_modules/
+
+# environment variables
+.env
+.env.*.local
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# build output
+dist/
+build/
+out/
+
+# coverage
+coverage/
+.nyc_output/
+
+# cache
+.cache/
+.tmp/
+temp/
+
+# runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# package managers
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
