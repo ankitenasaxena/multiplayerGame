@@ -57,7 +57,7 @@
             <div id="joinSection" style="display: none;" class="join-section">
                 <h3>Enter Room Code</h3>
                 <div class="room-id-input">
-                    <input type="text" id="roomIdInput" placeholder="e.g., ABC123" maxlength="10">
+                    <input type="text" id="roomIdInput" placeholder="ABC123" maxlength="10">
                 </div>
                 <button onclick="app.joinRoom()">Join</button>
             </div>
@@ -88,36 +88,55 @@
         </div>
 
         <div id="gameScreen" class="screen">
-            <div class="game-container">
-                <div class="game-main">
-                    <div class="game-header">
-                        <div>
-                            <div class="game-title">Round <span id="currentRound">1</span> of <span
-                                    id="totalRounds">3</span></div>
-                            <div class="round-info" id="drawerInfo"></div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 20px;">
-                            <div class="game-timer" id="gameTimer">60</div>
-                            <button class="leave-btn" onclick="app.leaveRoomFromGame()" style="width: auto; padding: 10px 20px; font-size: 14px;">Leave Room</button>
+            <!-- TOPBAR -->
+            <div class="game-topbar">
+                <div class="topbar-left">
+                    <div class="round-meta">Round <span id="currentRound">1</span> of <span id="totalRounds">3</span></div>
+                    <div class="round-info" id="drawerInfo"></div>
+                </div>
+
+                <div class="topbar-center">
+                    <div class="guess-this">Guess this</div>
+                    <div class="masked-word-display" id="maskedWordDisplay">_ _ _</div>
+                </div>
+
+                <div class="topbar-right">
+                    <div class="game-timer" id="gameTimer">60</div>
+                    <button class="leave-btn" onclick="app.leaveRoomFromGame()">Leave Room</button>
+                </div>
+            </div>
+
+            <!-- MAIN BODY: Leaderboard | Canvas | Chat -->
+            <div class="game-body">
+                <div class="leaderboard-section">
+                    <div class="sidebar-title">Leaderboard</div>
+                    <div class="leaderboard" id="gameLeaderboard"></div>
+                </div>
+
+                <div class="canvas-section" style="position:relative;">
+                    <!-- Overlay for time's up (shown between drawing and word selection) -->
+                    <div id="timeUpOverlay" class="word-selection-overlay" style="display:none;">
+                        <div class="overlay-panel">
+                            <h3 id="timeUpHeading">Time's up!</h3>
+                            <div id="timeUpLeaderboard" style="width:100%;"></div>
+                            <div id="timeUpSubtext" style="color:#666;margin-top:6px;"></div>
                         </div>
                     </div>
 
-                    <div id="wordSelectionPhase" style="display: none;">
-                        <p style="margin-bottom: 20px; color: #666;">Select a word to draw:</p>
-                        <div class="word-options-grid" id="wordOptionsContainer"></div>
+                    <!-- Overlay for word selection (drawer and viewers) -->
+                    <div id="wordSelectionOverlay" class="word-selection-overlay" style="display:none;">
+                        <div class="overlay-panel">
+                            <h3 id="overlayHeading">Select a word</h3>
+                            <div class="overlay-words" id="overlayWordOptions"></div>
+                        </div>
                     </div>
 
-                    <div id="drawingPhase" style="display: none;">
-                        <div class="masked-word-display" id="maskedWordDisplay">_ _ _</div>
+                    <div id="drawingPhase">
                         <canvas id="canvas"></canvas>
                         <div class="drawing-tools">
                             <div class="tool-selector">
-                                <button class="tool-btn active" id="penTool" onclick="app.selectTool('pen')" title="Pen">
-                                    ✏️
-                                </button>
-                                <button class="tool-btn" id="eraserTool" onclick="app.selectTool('eraser')" title="Eraser">
-                                    🧹
-                                </button>
+                                <button class="tool-btn active" id="penTool" onclick="app.selectTool('pen')" title="Pen">✏️</button>
+                                <button class="tool-btn" id="eraserTool" onclick="app.selectTool('eraser')" title="Eraser">🧹</button>
                             </div>
                             <div class="color-picker" id="colorPicker"></div>
                             <div class="size-control">
@@ -127,24 +146,19 @@
                             </div>
                             <button class="clear-btn" onclick="app.clearCanvas()">Clear</button>
                         </div>
-
-                        <div class="guess-input-area">
-                            <div class="guess-input">
-                                <input type="text" id="guessInput" placeholder="Type your guess..." maxlength="50" onkeypress="if(event.key==='Enter') app.submitGuess()">
-                                <button onclick="app.submitGuess()">Guess</button>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
-                <div class="game-sidebar">
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">Leaderboard</div>
-                        <div class="leaderboard" id="gameLeaderboard"></div>
-                    </div>
-                    <div class="sidebar-section">
-                        <div class="sidebar-title">Chat</div>
-                        <div class="chat" id="gameChat"></div>
+                <div class="chat-section">
+                    <div class="sidebar-title">Chat</div>
+                    <div class="chat" id="gameChat"></div>
+
+                    <!-- Guess input integrated with chat -->
+                    <div class="guess-input-area chat-guess">
+                        <div class="guess-input">
+                            <input type="text" id="guessInput" placeholder="Type your guess..." maxlength="50" onkeypress="if(event.key==='Enter') app.submitGuess()">
+                            <button onclick="app.submitGuess()">Guess</button>
+                        </div>
                     </div>
                 </div>
             </div>

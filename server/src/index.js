@@ -646,11 +646,11 @@ io.on('connection', (socket) => {
     timerEngine.stopTimer(room.id);
 
     // Award drawer score
-    scoreEngine.awardDrawerScore(
-      room,
-      playerManager.getPlayerById,
-      playerManager.updatePlayerScore
-    );
+    // scoreEngine.awardDrawerScore(
+    //   room,
+    //   playerManager.getPlayerById,
+    //   playerManager.updatePlayerScore
+    // );
 
     // End round
     const result = gameEngine.endRound(room);
@@ -709,13 +709,13 @@ io.on('connection', (socket) => {
       timerEngine.stopTimer(room.id);
       
       // Award final drawer score if applicable
-      if (game.drawerId && game.phase === gameEngine.PHASES.DRAWING) {
-        scoreEngine.awardDrawerScore(
-          room,
-          playerManager.getPlayerById,
-          playerManager.updatePlayerScore
-        );
-      }
+      // if (game.drawerId && game.phase === gameEngine.PHASES.DRAWING) {
+      //   scoreEngine.awardDrawerScore(
+      //     room,
+      //     playerManager.getPlayerById,
+      //     playerManager.updatePlayerScore
+      //   );
+      // }
       
       // End the game
       endGameForRoom(room);
@@ -764,11 +764,11 @@ io.on('connection', (socket) => {
   function progressToNextDrawer(room) {
     // Update drawer score for previous round before moving to next drawer
     if (room.game && room.game.drawerId) {
-      scoreEngine.awardDrawerScore(
-        room,
-        playerManager.getPlayerById,
-        playerManager.updatePlayerScore
-      );
+      // scoreEngine.awardDrawerScore(
+      //   room,
+      //   playerManager.getPlayerById,
+      //   playerManager.updatePlayerScore
+      // );
       
       // Broadcast updated leaderboard with drawer score
       const leaderboard = scoreEngine.getLeaderboard(room, playerManager.getPlayerById);
