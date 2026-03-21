@@ -233,9 +233,15 @@ function updateDrawerScoreForGuess(room, getPlayer, updatePlayerScore) {
   // and subtract what was already awarded
   
   // Get the drawer's score at the start of this round (we'll track this)
-  if (!game.drawerRoundStartScore) {
+  // if (!game.drawerRoundStartScore) {
+  //   game.drawerRoundStartScore = currentTotalScore;
+  // }
+
+  if (game.drawerRoundStartScore == null) {
     game.drawerRoundStartScore = currentTotalScore;
   }
+
+
   
   // Calculate new total: start score + (guessedCount * scorePerGuesser)
   const newTotalScore = game.drawerRoundStartScore + expectedRoundScore;

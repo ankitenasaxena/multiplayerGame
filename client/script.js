@@ -23,7 +23,8 @@
         };
 
         let canvas, ctx;
-        const colors = ['#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF8800', '#FF00FF'];
+        // Compact palette for drawer only (removed white & brown-ish colors)
+        const colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'];
 
         // ========== SOCKET INITIALIZATION ==========
         function initSocket() {
@@ -114,12 +115,17 @@
                 STATE.isDrawer = data.game.drawerId === STATE.playerId;
                 STATE.canDraw = STATE.isDrawer;
                 STATE.selectedWord = null;
+                // Suppress the time-up overlay for the very first word selection after game start
+                STATE._suppressNextTimeUp = true;
                 showScreen('game');
                 updateGameUI();
                 handleGamePhase();
             });
 
             STATE.socket.on('word_options', (data) => {
+                // Remember previous phase so we can decide whether to show Time's up overlay
+                const prevPhase = STATE.game ? STATE.game.phase : null;
+
                 // Update game state with latest from server (includes updated drawerId)
                 if (data.game) {
                     STATE.game = { ...STATE.game, ...data.game };
@@ -127,11 +133,35 @@
                 // Recalculate drawer status based on updated game state
                 STATE.isDrawer = STATE.game.drawerId === STATE.playerId;
                 STATE.canDraw = false; // Lock until word is selected
-                updateWordSelection(data.options);
+                updateWordSelection(data.options, prevPhase);
                 handleGamePhase();
             });
 
+            // 'round_started' is broadcast to all players when a new round begins.
+            // Only the drawer receives 'word_options' (options are sent privately), so
+            // non-drawers must be shown the waiting overlay when a round starts.
+            STATE.socket.on('round_started', (data) => {
+                console.log('[SOCKET] round_started', data);
+                if (data.game) {
+                    STATE.game = { ...STATE.game, ...data.game };
+                }
 
+                // Update who is drawer
+                STATE.isDrawer = STATE.game.drawerId === STATE.playerId;
+                STATE.canDraw = STATE.isDrawer;
+
+                // Hide any time-up overlay if present
+                const timeOverlay = document.getElementById('timeUpOverlay');
+                if (timeOverlay) timeOverlay.style.display = 'none';
+
+                // If not the drawer, show the waiting overlay immediately so guessers know the drawer is choosing
+                if (!STATE.isDrawer) {
+                    showWaitingWordOverlay();
+                }
+
+                updateGameUI();
+                handleGamePhase();
+            });
             STATE.socket.on('word_selected', (data) => {
                 // Update game state with latest from server (includes updated drawerId)
                 if (data.game) {
@@ -231,17 +261,19 @@
 
             STATE.socket.on('chat_message', (data) => {
                 STATE.gameChat.push({
-                    playerName: data.playerName,
-                    message: data.message,
-                    isCorrect: data.isCorrect
+                    playerId: data.playerId,
+                    playerName: formatName(data.playerName),
+                    message: data.message
                 });
                 updateGameChat();
             });
 
             STATE.socket.on('correct_guess', (data) => {
                 STATE.gameChat.push({
-                    playerName: data.playerName,
-                    message: `✔️ guessed the word! (+${data.score})`,
+                    playerId: data.playerId,
+                    playerName: formatName(data.playerName),
+                    message: `${formatName(data.playerName)} guessed the word • +${data.score} points`,
+                    isSystem: true,
                     isCorrect: true
                 });
                 updateGameChat();
@@ -376,10 +408,18 @@
 
             ctx = canvas.getContext('2d');
 
-            // Proper sizing
+            // Make canvas match the chat height if available to keep both panels visually aligned
+            const chatEl = document.getElementById('gameChat');
+            if (chatEl) {
+                const chatRect = chatEl.getBoundingClientRect();
+                if (chatRect.height > 100) {
+                    canvas.style.height = chatRect.height + 'px';
+                }
+            }
+
             const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = 500;
+            canvas.width = Math.round(rect.width);
+            canvas.height = Math.round(rect.height || 500);
 
             // Disable canvas if not drawer
             if (!STATE.canDraw) {
@@ -399,6 +439,14 @@
             canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
             canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
             canvas.addEventListener('touchend', stopDrawing);
+
+            // Bind one-time resize handler so canvas scales when viewport changes
+            if (!window.__scribble_resize_bound) {
+                window.__scribble_resize_bound = true;
+                window.addEventListener('resize', () => {
+                    if (STATE.currentScreen === 'game') initCanvas();
+                });
+            }
         }
 
 
@@ -417,6 +465,9 @@
             const lineWidth = parseInt(document.getElementById('lineWidth').value);
             const isEraser = STATE.drawingTool === 'eraser';
             
+            // Increase effective width when erasing for a more natural erase area
+            const effectiveLineWidth = isEraser ? Math.max(8, Math.round(lineWidth * 3)) : lineWidth;
+            
             if (isEraser) {
                 // Eraser mode: use destination-out composite
                 ctx.globalCompositeOperation = 'destination-out';
@@ -428,13 +479,13 @@
                 ctx.strokeStyle = colorBtn ? colorBtn.style.backgroundColor : '#000000';
             }
             
-            ctx.lineWidth = lineWidth;
+            ctx.lineWidth = effectiveLineWidth;
 
             STATE.socket.emit('draw_start', {
                 x: lastX,
                 y: lastY,
                 color: isEraser ? 'eraser' : ctx.strokeStyle,
-                lineWidth: lineWidth,
+                lineWidth: effectiveLineWidth,
                 tool: STATE.drawingTool
             });
 
@@ -450,6 +501,7 @@
 
             const lineWidth = parseInt(document.getElementById('lineWidth').value);
             const isEraser = STATE.drawingTool === 'eraser';
+            const effectiveLineWidth = isEraser ? Math.max(8, Math.round(lineWidth * 3)) : lineWidth;
             
             if (isEraser) {
                 ctx.globalCompositeOperation = 'destination-out';
@@ -460,7 +512,7 @@
                 ctx.strokeStyle = colorBtn ? colorBtn.style.backgroundColor : '#000000';
             }
             
-            ctx.lineWidth = lineWidth;
+            ctx.lineWidth = effectiveLineWidth;
 
             ctx.lineTo(x, y);
             ctx.stroke();
@@ -469,7 +521,7 @@
                 x, 
                 y, 
                 color: isEraser ? 'eraser' : ctx.strokeStyle, 
-                lineWidth,
+                lineWidth: effectiveLineWidth,
                 tool: STATE.drawingTool
             });
 
@@ -500,6 +552,7 @@
 
             const lineWidth = parseInt(document.getElementById('lineWidth').value);
             const isEraser = STATE.drawingTool === 'eraser';
+            const effectiveLineWidth = isEraser ? Math.max(8, Math.round(lineWidth * 3)) : lineWidth;
             
             if (isEraser) {
                 ctx.globalCompositeOperation = 'destination-out';
@@ -510,7 +563,7 @@
                 ctx.strokeStyle = colorBtn ? colorBtn.style.backgroundColor : '#000000';
             }
             
-            ctx.lineWidth = lineWidth;
+            ctx.lineWidth = effectiveLineWidth;
 
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
@@ -519,7 +572,7 @@
                 x: lastX, 
                 y: lastY, 
                 color: isEraser ? 'eraser' : ctx.strokeStyle, 
-                lineWidth,
+                lineWidth: effectiveLineWidth,
                 tool: STATE.drawingTool
             });
         }
@@ -534,6 +587,7 @@
 
             const lineWidth = parseInt(document.getElementById('lineWidth').value);
             const isEraser = STATE.drawingTool === 'eraser';
+            const effectiveLineWidth = isEraser ? Math.max(8, Math.round(lineWidth * 3)) : lineWidth;
             
             if (isEraser) {
                 ctx.globalCompositeOperation = 'destination-out';
@@ -544,7 +598,7 @@
                 ctx.strokeStyle = colorBtn ? colorBtn.style.backgroundColor : '#000000';
             }
             
-            ctx.lineWidth = lineWidth;
+            ctx.lineWidth = effectiveLineWidth;
 
             ctx.lineTo(x, y);
             ctx.stroke();
@@ -552,7 +606,7 @@
                 x, 
                 y, 
                 color: isEraser ? 'eraser' : ctx.strokeStyle, 
-                lineWidth,
+                lineWidth: effectiveLineWidth,
                 tool: STATE.drawingTool
             });
 
@@ -666,8 +720,10 @@
             },
 
             selectWord(word, el) {
-                document.querySelectorAll('.word-option').forEach(e => e.classList.remove('selected'));
-                el.classList.add('selected');
+                // provide some immediate feedback and send selection to server
+                // hide overlay locally (server will broadcast word_selected)
+                const overlay = document.getElementById('wordSelectionOverlay');
+                if (overlay) overlay.style.display = 'none';
                 STATE.socket.emit('select_word', { word });
             },
 
@@ -807,8 +863,26 @@
 
         function handleGamePhase() {
             const phase = STATE.game.phase;
-            document.getElementById('wordSelectionPhase').style.display = phase === 'word_select' ? 'block' : 'none';
-            document.getElementById('drawingPhase').style.display = phase === 'drawing' ? 'block' : 'none';
+            // Keep the canvas visible during word selection; use overlay for selection UI
+            document.getElementById('drawingPhase').style.display = 'block';
+
+            if (phase === 'word_select') {
+                // Show overlay with choices (will be populated by server's word_options event)
+                // If options aren't present yet, show a waiting overlay that indicates the drawer is choosing.
+                const overlay = document.getElementById('wordSelectionOverlay');
+                if (overlay && overlay.style.display !== 'flex') {
+                    showWaitingWordOverlay();
+                }
+                // Ensure the time-up overlay is hidden while choosing
+                const timeOverlay = document.getElementById('timeUpOverlay');
+                if (timeOverlay) timeOverlay.style.display = 'none';
+            } else {
+                // hide overlay in all other phases
+                const overlay = document.getElementById('wordSelectionOverlay');
+                if (overlay) overlay.style.display = 'none';
+                const timeOverlay = document.getElementById('timeUpOverlay');
+                if (timeOverlay) timeOverlay.style.display = 'none';
+            }
 
             if (phase === 'drawing') {
                 updateMaskedWordDisplay();
@@ -819,14 +893,13 @@
                 if (STATE.isDrawer) {
                     input.disabled = true;
                     btn.disabled = true;
-                    input.placeholder = 'You are drawing';
+                    input.placeholder = 'Guess disabled';
                 } else {
                     input.disabled = false;
                     btn.disabled = false;
                     input.placeholder = 'Type your guess...';
                 }
             }
-
         }
 
         function updateGameUI() {
@@ -836,14 +909,20 @@
             const drawerName = STATE.room.players.find(p => p.id === STATE.game.drawerId)?.name || 'Unknown';
             const drawerInfo = document.getElementById('drawerInfo');
             if (STATE.isDrawer) {
-                drawerInfo.textContent = '🎨 You are drawing!';
+                drawerInfo.textContent = '🎨 Your turn to draw';
             } else {
-                drawerInfo.textContent = `${drawerName} is drawing`;
+                drawerInfo.textContent = `${formatName(drawerName)} is drawing`;
             }
 
             updateGameLeaderboard();
             initColorPicker();
             updateLineWidthDisplay();
+
+            // SHOW/HIDE DRAWING CONTROLS: only visible to the drawer
+            const drawingTools = document.querySelector('.drawing-tools');
+            if (drawingTools) {
+                drawingTools.style.display = (STATE.isDrawer && STATE.canDraw ? 'grid' : 'none');
+            }
         }
 
         function updateMaskedWordDisplay() {
@@ -865,12 +944,46 @@
 
         function updateGameChat() {
             const chat = document.getElementById('gameChat');
-            chat.innerHTML = STATE.gameChat.map(msg => `
-        <div class="chat-message ${msg.isCorrect ? 'correct' : 'normal'}">
-          <span class="username">${msg.playerName}:</span> ${msg.message}
-        </div>
-      `).join('');
+            chat.innerHTML = STATE.gameChat.map(msg => {
+                if (msg.isSystem) {
+                    if (msg.isCorrect) {
+                        return `<div class="chat-message system correct"><div class="system-text">${escapeHtml(msg.message)}</div></div>`;
+                    }
+                    return `<div class="chat-message system"><div class="system-text">${escapeHtml(msg.message)}</div></div>`;
+                }
+                const selfClass = msg.playerId === STATE.playerId ? ' self' : '';
+                // Render as: username : message
+                return `<div class="chat-message${selfClass}"><div class="username">${escapeHtml(msg.playerName)}:</div><div class="text">${escapeHtml(msg.message)}</div></div>`;
+            }).join('');
             chat.scrollTop = chat.scrollHeight;
+            // When chat content changes sync canvas visual height to chat (without reinitializing canvas)
+            if (STATE.currentScreen === 'game') syncCanvasToChatHeight();
+        }
+
+        // Small helper: update canvas css height to match chat container without touching pixel backing
+        function syncCanvasToChatHeight() {
+            const chatEl = document.getElementById('gameChat');
+            const canvasEl = document.getElementById('canvas');
+            if (chatEl && canvasEl) {
+                const chatRect = chatEl.getBoundingClientRect();
+                if (chatRect.height > 0) {
+                    canvasEl.style.height = chatRect.height + 'px';
+                }
+            }
+        }
+
+        // Escape HTML in messages to prevent accidental markup injection
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/[&<>"'`]/g, function (s) {
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;","`":"&#96;"})[s];
+            });
+        }
+
+        // Format display names consistently (Title Case)
+        function formatName(name) {
+            if (!name || typeof name !== 'string') return '';
+            return name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
         }
 
         function playCorrectGuessSound() {
@@ -918,16 +1031,110 @@
             timer.classList.toggle('warning', STATE.timerRemaining < 10);
         }
 
-        function updateWordSelection(options) {
-            const container = document.getElementById('wordOptionsContainer');
-            container.innerHTML = '';
-            options.forEach(word => {
-                const div = document.createElement('div');
-                div.className = 'word-option';
-                div.textContent = word;
-                div.onclick = () => app.selectWord(word, div);
-                container.appendChild(div);
-            });
+        function updateWordSelection(options, prevPhase) {
+            // If the game just started, the first word selection should not show the Time's up overlay
+            if (STATE._suppressNextTimeUp) {
+                STATE._suppressNextTimeUp = false;
+                if (STATE.isDrawer) {
+                    showWordOverlay(options);
+                } else {
+                    showWaitingWordOverlay();
+                }
+                return;
+            }
+
+            // If time just expired (we were drawing), show Time's up overlay first, then proceed
+            if (prevPhase === 'drawing') {
+                // time up overlay will call showWordOverlay after a short delay
+                showTimeUpOverlay(options);
+                return;
+            }
+
+            // Normal flow: immediately show overlays
+            if (STATE.isDrawer) {
+                // Drawer sees actual word options
+                showWordOverlay(options);
+            } else {
+                // All other players should see a clear "X is choosing a word" waiting overlay
+                showWaitingWordOverlay();
+            }
+        }
+
+        function showTimeUpOverlay(options) {
+            const overlay = document.getElementById('timeUpOverlay');
+            const heading = document.getElementById('timeUpHeading');
+            const board = document.getElementById('timeUpLeaderboard');
+            const sub = document.getElementById('timeUpSubtext');
+
+            const drawerName = formatName(STATE.room?.players?.find(p => p.id === STATE.game?.drawerId)?.name || 'Someone');
+
+            heading.textContent = "Time's up!";
+            if (STATE.isDrawer) {
+                sub.textContent = 'Selecting next word…';
+            } else {
+                sub.innerHTML = `${drawerName} is choosing a word… <span class="spinner-small"></span>`;
+            }
+
+            // Small leaderboard (top 5)
+            const sorted = [...(STATE.gameLeaderboard || [])].sort((a,b)=> (b.score||0) - (a.score||0)).slice(0,5);
+            if (sorted.length === 0) {
+                board.innerHTML = '<div style="color:#666;text-align:center;">No scores yet</div>';
+            } else {
+                board.innerHTML = `<div class="overlay-leaderboard">${sorted.map((p,i)=>`<div class="overlay-leaderboard-item"><div>#${i+1} ${p.name}</div><div>${p.score||0}</div></div>`).join('')}</div>`;
+            }
+
+            overlay.style.display = 'flex';
+
+            // After a short delay hide and proceed to word selection overlay
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                showWordOverlay(options);
+            }, 2400);
+        }
+
+        function showWordOverlay(options) {
+            const overlay = document.getElementById('wordSelectionOverlay');
+            const panelWords = document.getElementById('overlayWordOptions');
+            const heading = document.getElementById('overlayHeading');
+            panelWords.innerHTML = '';
+
+            const drawerName = formatName(STATE.room?.players?.find(p => p.id === STATE.game.drawerId)?.name || 'Someone');
+
+            if (STATE.isDrawer) {
+                heading.textContent = 'Select a word';
+                options.forEach(word => {
+                    const el = document.createElement('div');
+                    el.className = 'overlay-word';
+                    el.textContent = word;
+                    el.onclick = () => {
+                        app.selectWord(word, el);
+                        overlay.style.display = 'none';
+                    };
+                    panelWords.appendChild(el);
+                });
+            } else {
+                heading.textContent = `${drawerName} is choosing a word…`;
+                options.forEach(word => {
+                    const el = document.createElement('div');
+                    el.className = 'overlay-word disabled';
+                    el.textContent = word;
+                    panelWords.appendChild(el);
+                });
+            }
+
+            overlay.style.display = 'flex';
+        }
+
+        function showWaitingWordOverlay() {
+            const overlay = document.getElementById('wordSelectionOverlay');
+            const panelWords = document.getElementById('overlayWordOptions');
+            const heading = document.getElementById('overlayHeading');
+            panelWords.innerHTML = '';
+
+            const drawerName = formatName(STATE.room?.players?.find(p => p.id === STATE.game.drawerId)?.name || 'Someone');
+            heading.textContent = `${drawerName} is choosing a word…`;
+            panelWords.innerHTML = `<div class="overlay-word disabled" style="min-width:240px;display:flex;align-items:center;justify-content:center;gap:8px;">Waiting… <span class="spinner-small"></span></div>`;
+            overlay.style.display = 'flex';
         }
 
 
@@ -961,17 +1168,18 @@
 
         function initColorPicker() {
             const picker = document.getElementById('colorPicker');
-            if (picker.children.length > 0) return;
+            // Always reset - visibility is controlled by whether player is drawer
+            picker.innerHTML = '';
+            if (!STATE.isDrawer) {
+                picker.style.display = 'none';
+                return;
+            }
+            picker.style.display = 'flex';
             colors.forEach((color, i) => {
                 const btn = document.createElement('button');
                 btn.className = `color-btn ${i === 0 ? 'active' : ''}`;
                 btn.style.backgroundColor = color;
-                btn.style.border = '2px solid transparent';
-                btn.style.width = '24px';
-                btn.style.height = '24px';
-                btn.style.borderRadius = '50%';
-                btn.style.cursor = 'pointer';
-                btn.style.transition = 'all 0.2s';
+                btn.setAttribute('title', color);
                 btn.onclick = (e) => {
                     e.preventDefault();
                     document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
@@ -986,8 +1194,6 @@
             const display = document.getElementById('sizeDisplay');
             input.addEventListener('input', () => {
                 display.textContent = input.value;
-                display.style.width = input.value + 'px';
-                display.style.height = input.value + 'px';
             });
         }
 
